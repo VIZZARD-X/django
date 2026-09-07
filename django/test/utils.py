@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sys
+import threading
 import time
 import warnings
 from contextlib import contextmanager
@@ -154,6 +155,31 @@ def setup_test_environment(debug=None):
 
     deactivate()
 
+    saved_data.unraisable_exceptions = []
+    saved_data.unhandled_thread_exceptions = []
+
+    saved_data.original_unraisablehook = sys.unraisablehook
+
+    def unraisablehook(unraisable):
+        saved_data.unraisable_exceptions.append(
+            (unraisable.exc_type, unraisable.exc_value, unraisable.exc_traceback)
+        )
+        if saved_data.original_unraisablehook:
+            saved_data.original_unraisablehook(unraisable)
+
+    sys.unraisablehook = unraisablehook
+
+    saved_data.original_threading_excepthook = threading.excepthook
+
+    def threading_excepthook(args):
+        saved_data.unhandled_thread_exceptions.append(
+            (args.exc_type, args.exc_value, args.exc_traceback)
+        )
+        if saved_data.original_threading_excepthook:
+            saved_data.original_threading_excepthook(args)
+
+    threading.excepthook = threading_excepthook
+
 
 def teardown_test_environment():
     """
@@ -168,8 +194,22 @@ def teardown_test_environment():
     Template._render = saved_data.template_render
     PartialTemplate._render = saved_data.partial_template_render
 
+    sys.unraisablehook = saved_data.original_unraisablehook
+    threading.excepthook = saved_data.original_threading_excepthook
+    unraisable_exceptions = saved_data.unraisable_exceptions
+    unhandled_thread_exceptions = saved_data.unhandled_thread_exceptions
+
     del _TestState.saved_data
     del mail.outbox
+
+    exceptions = [
+        exc_value
+        for _, exc_value, _ in unraisable_exceptions + unhandled_thread_exceptions
+    ]
+    if exceptions:
+        raise RuntimeError(
+            f"Unhandled exception(s) occurred outside of a test case: {exceptions}"
+        )
 
 
 def setup_databases(

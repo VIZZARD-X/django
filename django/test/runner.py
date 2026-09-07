@@ -494,6 +494,19 @@ def _run_subsuite(args):
     runner_class, subsuite_index, subsuite, failfast, buffer = args
     runner = runner_class(failfast=failfast, buffer=buffer)
     result = runner.run(subsuite)
+
+    from django.test.utils import _TestState
+
+    if hasattr(_TestState, "saved_data"):
+        unraisable = getattr(_TestState.saved_data, "unraisable_exceptions", [])
+        unhandled = getattr(_TestState.saved_data, "unhandled_thread_exceptions", [])
+        exceptions = unraisable + unhandled
+        if exceptions:
+            exc_values = [exc_info[1] for exc_info in exceptions]
+            raise RuntimeError(
+                f"Unhandled exception(s) in parallel subsuite worker: {exc_values}"
+            )
+
     return subsuite_index, result.events
 
 

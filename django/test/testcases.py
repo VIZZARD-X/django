@@ -376,6 +376,26 @@ class SimpleTestCase(unittest.TestCase):
                 result.addError(self, sys.exc_info())
                 return
 
+        from django.test.utils import _TestState
+
+        if hasattr(_TestState, "saved_data"):
+            unraisable = getattr(_TestState.saved_data, "unraisable_exceptions", [])
+            unhandled = getattr(
+                _TestState.saved_data, "unhandled_thread_exceptions", []
+            )
+
+            for exc_info in unraisable:
+                if debug:
+                    raise exc_info[1]
+                result.addError(self, exc_info)
+            unraisable.clear()
+
+            for exc_info in unhandled:
+                if debug:
+                    raise exc_info[1]
+                result.addError(self, exc_info)
+            unhandled.clear()
+
     @classmethod
     def _pre_setup(cls):
         """
